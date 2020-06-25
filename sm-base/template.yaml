@@ -25,10 +25,10 @@ Resources:
       DefinitionSubstitutions:
         ChildStateMachineArn: !Ref ChildStateMachine
       Events:
-        HourlyTradingSchedule:
+        HourlySchedule:
           Type: Schedule
           Properties:
-            Description: Schedule to run the stock trading state machine every hour
+            Description: Schedule to run this state machine every hour
             Enabled: False
             Schedule: "rate(1 hour)"
       Role: !GetAtt StatesExecutionRole.Arn
