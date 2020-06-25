@@ -1,0 +1,53 @@
+{
+    "Comment": "Example to execute AWS Glue Job",
+    "StartAt": "Prep",
+    "States": {
+        "Prep": {
+            "Comment": "Write prep if you need",
+            "Type": "Pass",
+            "Next": "execGlueJob1"
+        },
+        "execGlueJob1": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::glue:startJobRun.sync",
+            "Parameters": {
+                "JobName": "${GlueJobName1}"
+            },
+            "Next": "execGlueJob2",
+            "Catch": [
+                {
+                "ErrorEquals": ["States.TaskFailed"],
+                "Next": "NotifyFailure",
+                "ResultPath": "$.cause"
+                }
+            ]
+        },
+        "execGlueJob2": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::glue:startJobRun.sync",
+            "Parameters": {
+                "JobName": "${GlueJobName2}"
+            },
+            "Next": "Finished",
+            "Catch": [
+                {
+                "ErrorEquals": ["States.TaskFailed"],
+                "Next": "NotifyFailure",
+                "ResultPath": "$.cause"
+                }
+            ]
+        },
+        "Finished": {
+            "Type": "Succeed"
+        },
+        "NotifyFailure": {
+            "Comment": "ジョブの失敗通知を記述",
+            "Type": "Pass",
+            "Next": "ExecutionFailed"
+        },
+        "ExecutionFailed": {
+            "Type": "Fail",
+            "Cause" : "$.cause"
+        }
+    }
+}

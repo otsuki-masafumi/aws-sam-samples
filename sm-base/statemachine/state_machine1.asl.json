@@ -1,0 +1,38 @@
+{
+    "Comment": "Example to execute child state machine",
+    "StartAt": "Preprocessing",
+    "States": {
+      "Preprocessing": {
+        "Comment": "Write prep if you need",
+        "Type": "Pass",
+        "Next": "ExecuteGlueJobs"
+      },
+      "ExecuteGlueJobs": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::states:startExecution.sync",
+        "Parameters": {
+          "StateMachineArn": "${ChildStateMachineArn}"
+        },
+        "Catch": [
+          {
+            "ErrorEquals": ["States.TaskFailed"],
+            "Next": "NotifyFailure",
+            "ResultPath": "$.cause"
+          }
+        ],
+        "Next": "Finished"
+      },
+      "Finished": {
+        "Type": "Succeed"
+      },
+      "NotifyFailure": {
+        "Comment": "Write here failure notification",
+        "Type": "Pass",
+        "Next": "ExecutionFailed"
+      },
+      "ExecutionFailed": {
+        "Type": "Fail",
+        "Cause": "Glue Job failed"
+      }
+    }
+}
