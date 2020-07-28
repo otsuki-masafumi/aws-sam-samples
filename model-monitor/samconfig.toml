@@ -1,0 +1,11 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "model-monitor-invoke"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-lntxwx45uv6a"
+s3_prefix = "model-monitor-invoke"
+region = "ap-northeast-1"
+confirm_changeset = false
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "SystemId=\"mmtest\" VpcAName=\"VPC-A\" PrivateSubnet1Description=\"Private Subnet1\" PrivateSubnet2Description=\"Private Subnet2\" VpcACidr=\"10.10.0.0/16\" VpcACidrPrivateSubnet1=\"10.10.0.0/24\" VpcACidrPrivateSubnet2=\"10.10.1.0/24\""

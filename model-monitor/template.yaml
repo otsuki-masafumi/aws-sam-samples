@@ -1,0 +1,255 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Model monitor lambda invocation sample
+
+Globals:
+  Function:
+    Timeout: 60
+    MemorySize: 256
+     
+Parameters:
+  SystemId:
+    Type:  String
+    Default: mmtest
+    Description: System Id
+  VpcAName:
+    Description: Name of VPC A.
+    Type: String
+    Default: VPC-A
+  PrivateSubnet1Description:
+    Description: Private Subnet1 Description.
+    Type: String
+    Default: Private Subnet1
+  PrivateSubnet2Description:
+    Description: Private Subnet2 Description.
+    Type: String
+    Default: Private Subnet2
+  VpcACidr:
+    Description: CIDR Information of VPC A
+    Type: String
+    Default: 10.10.0.0/16
+  VpcACidrPrivateSubnet1:
+    Description: CIDR Information of Private Subnet 1 in VPC A.
+    Type: String
+    Default: 10.10.0.0/24
+  VpcACidrPrivateSubnet2:
+    Description: CIDR Information of Private Subnet 2 in VPC A.
+    Type: String
+    Default: 10.10.1.0/24
+
+Mappings:
+  AZ:
+    ap-northeast-1:
+      primary: ap-northeast-1a
+      secondary: ap-northeast-1c
+    us-east-1:
+      primary: us-east-1b
+      secondary: us-east-1c
+
+Resources:
+  VpcA:
+    Type: AWS::EC2::VPC
+    Properties:
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      CidrBlock:
+        Ref: VpcACidr
+      InstanceTenancy: default
+      Tags:
+      - Key: Application
+        Value:
+          Ref: AWS::StackId
+      - Key: Name
+        Value:
+          Ref: VpcAName
+
+  VpcAPrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VpcA
+      Tags:
+      - Key: Application
+        Value:
+          Ref: AWS::StackId
+      - Key: Network
+        Value: Private
+  VpcAPrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VpcA
+      AvailabilityZone:
+        Fn::FindInMap:
+        - AZ
+        - Ref: AWS::Region
+        - primary
+      CidrBlock:
+        Ref: VpcACidrPrivateSubnet1
+      Tags:
+      - Key: Application
+        Value:
+          Ref: AWS::StackId
+      - Key: Network
+        Value: Private
+      - Key: Name
+        Value:
+          Ref: PrivateSubnet1Description
+  VpcAPrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VpcA
+      AvailabilityZone:
+        Fn::FindInMap:
+        - AZ
+        - Ref: AWS::Region
+        - secondary
+      CidrBlock:
+        Ref: VpcACidrPrivateSubnet2
+      Tags:
+      - Key: Application
+        Value:
+          Ref: AWS::StackId
+      - Key: Network
+        Value: Private
+      - Key: Name
+        Value:
+          Ref: PrivateSubnet2Description
+  VpcASubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+        SubnetId:
+          Ref: VpcAPrivateSubnet1
+        RouteTableId:
+          Ref: VpcAPrivateRouteTable
+  VpcASubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+        SubnetId:
+          Ref: VpcAPrivateSubnet2
+        RouteTableId:
+          Ref: VpcAPrivateRouteTable
+
+  VpcAS3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action:
+              - "*"
+            Resource:
+              - "*"
+      RouteTableIds:
+        - Ref: VpcAPrivateRouteTable
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcId:
+        Ref: VpcA
+  SageMakerEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.sagemaker.api"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      VpcId: 
+        !Ref VpcA
+      SubnetIds:
+          - !Ref VpcAPrivateSubnet1
+          - !Ref VpcAPrivateSubnet2
+      SecurityGroupIds:
+        - !Ref LambdaFunctionVpcASecurityGroup
+  SageMakerRuntimeEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.sagemaker.runtime"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      VpcId: 
+        !Ref VpcA
+      SubnetIds:
+          - !Ref VpcAPrivateSubnet1
+          - !Ref VpcAPrivateSubnet2
+      SecurityGroupIds:
+        - !Ref LambdaFunctionVpcASecurityGroup
+
+  IamRoleRunProcessingJob:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - sagemaker.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: sagemaker-job-processing
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+            - Effect: Allow
+              Resource: "*"
+              Action:
+              - "sagemaker:*"
+              - "s3:*"
+  LambdaFunctionVpcASecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group
+      VpcId: !Ref VpcA
+      Tags:
+        - Key: Name
+          Value: lambda-function
+  InvokeModelMonitorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions/invokeModelMonitor
+      Handler: lambda_function.handler
+      Runtime: python3.7
+      Layers:
+        - !Ref SgSDKLayerVersion
+      Policies:
+        - CloudWatchPutMetricPolicy: {}
+        - Statement:
+          - Effect: "Allow"
+            Action: 
+             - "sagemaker:*"
+            Resource: "*"
+        - Statement:
+          - Effect: "Allow"
+            Action:
+              - "iam:GetRole"
+              - "iam:PassRole"
+            Resource: !GetAtt IamRoleRunProcessingJob.Arn
+        - Statement:
+          - Effect: "Allow"
+            Action:
+              - "ec2:CreateNetworkInterface"
+              - "ec2:DescribeNetworkInterfaces"
+              - "ec2:DeleteNetworkInterface"
+            Resource: "*"
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaFunctionVpcASecurityGroup
+        SubnetIds:
+          - !Ref VpcAPrivateSubnet1
+          - !Ref VpcAPrivateSubnet2
+      Environment:
+        Variables:
+          system_id: !Sub SystemId
+          sg_role_arn: !GetAtt IamRoleRunProcessingJob.Arn
+  SgSDKLayerVersion:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      CompatibleRuntimes:
+        - python3.7
+      ContentUri: functions/layer/sagemaker.zip
+      Description: SageMaker SDK
+      LayerName: SageMakerSDK
+      RetentionPolicy: Retain
